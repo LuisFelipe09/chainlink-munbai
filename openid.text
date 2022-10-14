@@ -1,0 +1,52 @@
+# THIS IS EXAMPLE CODE THAT USES HARDCODED VALUES FOR CLARITY.
+# THIS IS EXAMPLE CODE THAT USES UN-AUDITED CODE.
+# DO NOT USE THIS CODE IN PRODUCTION.
+
+type = "directrequest"
+schemaVersion = 1
+name = "Get multiple strings"
+# Optional External Job ID: Automatically generated if unspecified
+# externalJobID = "b1d42cd5-4a3a-4200-b1f7-25a68e48aad8"
+contractAddress = "0x028f1D21ff3658eF20De0e6e042d294eCaAD94Ee"
+maxTaskDuration = "0s"
+observationSource = """
+    decode_log   [type="ethabidecodelog"
+                  abi="OracleRequest(bytes32 indexed specId, address requester, bytes32 requestId, uint256 payment, address callbackAddr, bytes4 callbackFunctionId, uint256 cancelExpiration, uint256 dataVersion, bytes data)"
+                  data="$(jobRun.logData)"
+                  topics="$(jobRun.logTopics)"]
+
+    decode_cbor  [type="cborparse" data="$(decode_log.data)"]
+    decode_log -> decode_cbor
+    decode_cbor -> fetch
+    fetch        [type="http" method=GET url="$(decode_cbor.get)" allowUnrestrictedNetworkAccess="true"]
+    mean         [type="jsonparse" path="$(decode_cbor.mean)" data="$(fetch)"]
+    fetch -> mean
+    std          [type="jsonparse" path="$(decode_cbor.std)" data="$(fetch)"]
+    fetch -> std
+    min          [type="jsonparse" path="$(decode_cbor.min)" data="$(fetch)"]
+    fetch -> min
+    max          [type="jsonparse" path="$(decode_cbor.max)" data="$(fetch)"]
+    fetch -> max
+    uuid_p       [type="jsonparse" path="$(decode_cbor.uuid_p)" data="$(fetch)"]
+    fetch -> uuid_p
+    id_p         [type="jsonparse" path="$(decode_cbor.id_p)" data="$(fetch)"]
+    fetch -> id_p
+
+    mean -> encode_data
+    std -> encode_data
+    min -> encode_data
+    max -> encode_data
+    uuid_p -> encode_data
+    id_p -> encode_data
+    
+    encode_data  [type="ethabiencode" 
+                  abi="(bytes32 requestId, string mean, string std, string max, string uuid, string id)" 
+                  data="{\\"requestId\\": $(decode_log.requestId), \\"mean\\": $(mean), \\"std\\": $(std), \\"max\\": $(max), \\"uuid\\": $(uuid_p), \\"id\\": $(id_p)}"]
+    encode_tx    [type="ethabiencode"
+                  abi="fulfillOracleRequest(bytes32 requestId, uint256 payment, address callbackAddress, bytes4 callbackFunctionId, uint256 expiration, bytes calldata data)"
+                  data="{\\"requestId\\": $(decode_log.requestId), \\"payment\\":   $(decode_log.payment), \\"callbackAddress\\": $(decode_log.callbackAddr), \\"callbackFunctionId\\": $(decode_log.callbackFunctionId), \\"expiration\\": $(decode_log.cancelExpiration), \\"data\\": $(encode_data)}"
+                 ]
+    submit_tx    [type="ethtx" to="0x028f1D21ff3658eF20De0e6e042d294eCaAD94Ee" data="$(encode_tx)"]
+
+    encode_data -> encode_tx -> submit_tx
+"""
